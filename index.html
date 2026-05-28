@@ -1284,28 +1284,12 @@
       const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);
 
-      // 方法1：window.open（iOS Safari 兼容）
-      const w = window.open(url, "_blank");
-      if (w) {
-        setTimeout(() => { w.close(); URL.revokeObjectURL(url); }, 500);
-        els.saveStatus.textContent = "备份已下载（如未弹出，请点下方链接）";
-        // 兜底：显示一个可见链接
-        const oldLink = document.getElementById("fallbackLink");
-        if (oldLink) oldLink.remove();
-        const linkEl = document.createElement("div");
-        linkEl.id = "fallbackLink";
-        linkEl.style.cssText = "margin-top:8px;padding:8px;background:var(--field);border-radius:6px;word-break:break-all;font-size:12px;";
-        linkEl.innerHTML = `如未下载，<a href="${url}" download="${filename}" style="color:var(--blue)">点此保存</a>（长按链接→下载链接文件）`;
-        els.saveStatus.parentNode.insertBefore(linkEl, els.saveStatus.nextSibling);
-        return;
-      }
-
-      // 方法2：navigator.share（iOS 14+）
+      // 方法1：navigator.share（iOS 14+，最可靠）
       try {
         const file = new File([blob], filename, { type: "application/json" });
         if (navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({ files: [file], title: "基金数据备份" });
-          els.saveStatus.textContent = "备份已保存";
+          els.saveStatus.textContent = "已保存到文件 App";
           URL.revokeObjectURL(url);
           return;
         }
@@ -1313,14 +1297,14 @@
         if (e.name !== "AbortError") console.error(e);
       }
 
-      // 方法3：a.click兜底
+      // 方法2：a.click（Chrome/桌面）
       const a = document.createElement("a");
       a.href = url;
       a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
       els.saveStatus.textContent = "备份已下载";
     }
 
