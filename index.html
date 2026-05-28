@@ -1,0 +1,1514 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>美股基金预估收益</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f6f8;
+      --panel: #ffffff;
+      --card: #ffffff;
+      --field: #f3f5f8;
+      --text: #17202e;
+      --muted: #697586;
+      --line: #e5e9ef;
+      --red: #d83b31;
+      --green: #168a55;
+      --blue: #2f6fe4;
+      --shadow: 0 12px 28px rgba(20, 32, 46, .08);
+    }
+
+    body.dark {
+      color-scheme: dark;
+      --bg: #11161d;
+      --panel: #181f28;
+      --card: #1d2630;
+      --field: #252f3a;
+      --text: #edf2f7;
+      --muted: #a4afbd;
+      --line: #303b48;
+      --red: #ff685f;
+      --green: #35c979;
+      --blue: #86afff;
+      --shadow: 0 12px 30px rgba(0, 0, 0, .25);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Microsoft YaHei", sans-serif;
+    }
+
+    button, input {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .app {
+      width: min(1180px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: 24px 0 44px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 5vw, 46px);
+      letter-spacing: 0;
+      line-height: 1.12;
+    }
+
+    .date-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 40px;
+      margin-left: 14px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 14px;
+      vertical-align: middle;
+      box-shadow: var(--shadow);
+    }
+
+    .theme-btn, .clear-btn, .add-btn {
+      min-height: 42px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      color: var(--text);
+      box-shadow: var(--shadow);
+      padding: 0 14px;
+      white-space: nowrap;
+    }
+
+    .indices {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .index-card, .dashboard, .date-tools, .fund-card {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .index-card {
+      padding: 16px;
+    }
+
+    .index-name, .dash-label, .field-label, .subtle {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .index-value {
+      display: block;
+      margin-top: 8px;
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 1px;
+      overflow: hidden;
+      margin-bottom: 14px;
+      background: var(--line);
+    }
+
+    .dash-item {
+      min-width: 0;
+      padding: 18px 16px;
+      background: var(--panel);
+    }
+
+    .dash-value {
+      display: block;
+      margin-top: 8px;
+      font-size: clamp(23px, 3vw, 34px);
+      font-weight: 850;
+      letter-spacing: 0;
+      white-space: nowrap;
+    }
+
+    .date-tools {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding: 12px;
+    }
+
+    .date-tools-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .date-tools-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .date-input {
+      min-height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--field);
+      color: var(--text);
+      padding: 0 10px;
+    }
+
+    .fund-list {
+      display: grid;
+      gap: 12px;
+    }
+
+    .fund-card {
+      position: relative;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: minmax(240px, 1.25fr) repeat(4, minmax(122px, 1fr)) minmax(150px, 1.05fr);
+      gap: 12px;
+      align-items: end;
+      padding: 16px 16px 16px 22px;
+    }
+
+    .fund-card::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 5px;
+      background: var(--muted);
+    }
+
+    .fund-card.up::before { background: var(--red); }
+    .fund-card.down::before { background: var(--green); }
+
+    .sort-controls {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      display: inline-flex;
+      gap: 6px;
+    }
+
+    .sort-btn {
+      width: 34px;
+      height: 30px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--field);
+      color: var(--text);
+      box-shadow: none;
+      line-height: 1;
+    }
+
+    .sort-btn:disabled {
+      cursor: not-allowed;
+      opacity: .38;
+    }
+
+    .delete-btn {
+      width: 34px;
+      height: 30px;
+      border: 1px solid color-mix(in srgb, var(--red) 35%, var(--line));
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--red) 10%, var(--field));
+      color: var(--red);
+      box-shadow: none;
+      line-height: 1;
+    }
+
+    .identity {
+      display: grid;
+      grid-column: 1 / -1;
+      grid-template-columns: 128px minmax(220px, 1.35fr) minmax(180px, .8fr);
+      gap: 10px;
+      margin-right: 124px;
+      padding-bottom: 4px;
+    }
+
+    .remarks {
+      grid-column: auto;
+    }
+
+    .identity .field-label {
+      font-size: 14px;
+    }
+
+    .identity input {
+      min-height: 48px;
+      font-size: 18px;
+      font-weight: 760;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .field input {
+      width: 100%;
+      min-height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--field);
+      color: var(--text);
+      padding: 0 10px;
+      outline: none;
+    }
+
+    .field input:focus, .date-input:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 18%, transparent);
+    }
+
+    .calc-box {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+      padding-bottom: 3px;
+    }
+
+    .calc-value {
+      font-size: 20px;
+      font-weight: 820;
+      white-space: nowrap;
+    }
+
+    .progress-track {
+      height: 8px;
+      border-radius: 999px;
+      background: var(--field);
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--muted);
+      transition: width .2s ease;
+    }
+
+    .up-text { color: var(--red); }
+    .down-text { color: var(--green); }
+    .neutral-text { color: var(--muted); }
+
+    .fund-actions {
+      display: flex;
+      justify-content: center;
+      padding-top: 8px;
+    }
+
+    .add-btn {
+      min-width: 180px;
+      background: var(--blue);
+      border-color: var(--blue);
+      color: #fff;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background: rgba(9, 14, 20, .42);
+    }
+
+    .modal-backdrop.show {
+      display: flex;
+    }
+
+    .modal {
+      width: min(620px, 100%);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--panel);
+      box-shadow: 0 22px 70px rgba(0, 0, 0, .28);
+      padding: 18px;
+    }
+
+    .modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .modal-title {
+      margin: 0;
+      font-size: 22px;
+    }
+
+    .sort-list {
+      display: grid;
+      gap: 8px;
+      max-height: min(56vh, 440px);
+      overflow-y: auto;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--field);
+      padding: 10px;
+    }
+
+    .sort-row {
+      display: grid;
+      grid-template-columns: 36px 92px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      padding: 6px 10px 6px 6px;
+      user-select: none;
+    }
+
+    .sort-row.dragging {
+      opacity: .45;
+    }
+
+    .drag-handle {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 32px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--field);
+      color: var(--muted);
+      cursor: grab;
+      touch-action: none;
+    }
+
+    .drag-handle:active {
+      cursor: grabbing;
+    }
+
+    .sort-code {
+      font-weight: 800;
+    }
+
+    .sort-name {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--muted);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+      .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+    @media (max-width: 1060px) {
+      .indices {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .dashboard {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .fund-card {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .identity {
+        grid-column: 1 / -1;
+        grid-template-columns: 120px minmax(180px, 1fr) minmax(150px, .8fr);
+      }
+    }
+
+    @media (max-width: 680px) {
+      .app {
+        width: min(100% - 10px, 1180px);
+        padding-top: 10px;
+      }
+
+      .topbar {
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+
+      h1 {
+        font-size: 24px;
+      }
+
+      .date-tools {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 6px;
+        margin-bottom: 10px;
+        padding: 7px;
+      }
+
+      .date-tools-left {
+        display: grid;
+        grid-template-columns: auto minmax(130px, 1fr) auto;
+        gap: 6px;
+      }
+
+      .date-tools-right {
+        display: flex;
+        gap: 6px;
+        justify-content: flex-start;
+        overflow-x: auto;
+        padding-bottom: 1px;
+        scrollbar-width: none;
+      }
+
+      .date-tools-right::-webkit-scrollbar {
+        display: none;
+      }
+
+      .date-input {
+        min-height: 32px;
+        width: 100%;
+      }
+
+      #saveStatus {
+        align-self: center;
+      }
+
+      .date-pill {
+        display: flex;
+        width: fit-content;
+        min-height: 28px;
+        margin: 6px 0 0;
+        padding: 0 8px;
+        font-size: 12px;
+      }
+
+      .indices {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+
+      .dashboard {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-bottom: 8px;
+      }
+
+      .index-card, .dash-item {
+        padding: 6px 7px;
+        border-radius: 9px;
+      }
+
+      .index-value {
+        margin-top: 3px;
+        font-size: 16px;
+      }
+
+      .dash-value {
+        margin-top: 2px;
+        font-size: 15px;
+      }
+
+      .index-name, .dash-label {
+        font-size: 10px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .index-card .subtle {
+        display: none;
+      }
+
+      .fund-list {
+        gap: 10px;
+      }
+
+      .fund-card {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+        padding: 14px 12px 14px 17px;
+      }
+
+      .identity {
+        grid-column: 1 / -1;
+        grid-template-columns: minmax(72px, .75fr) minmax(112px, 1.35fr) minmax(76px, .8fr);
+        gap: 8px;
+        margin-right: 0;
+        padding-top: 34px;
+      }
+
+      .identity .field-label, .field-label, .subtle {
+        font-size: 10px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .identity input {
+        min-height: 38px;
+        font-size: 14px;
+        font-weight: 720;
+      }
+
+      .field {
+        gap: 4px;
+      }
+
+      .field input {
+        min-height: 34px;
+        border-radius: 8px;
+        padding: 0 7px;
+      }
+
+      .sort-controls {
+        top: 10px;
+        right: 10px;
+      }
+
+      .sort-btn, .delete-btn {
+        width: 32px;
+        height: 28px;
+      }
+
+      .calc-box {
+        grid-column: 1 / -1;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 5px 8px;
+      }
+
+      .calc-box .field-label, .calc-box .progress-track {
+        grid-column: 1 / -1;
+      }
+
+      .calc-value {
+        font-size: 18px;
+      }
+
+      .theme-btn {
+        width: auto;
+        min-height: 36px;
+        padding: 0 10px;
+      }
+
+      .clear-btn, .add-btn, .date-tools-right button {
+        width: auto;
+        min-height: 32px;
+        padding: 0 8px;
+        font-size: 11px;
+        flex: 0 0 auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div>
+        <h1>美股基金预估收益 <span class="date-pill" id="todayText">--</span></h1>
+      </div>
+      <button class="theme-btn" id="themeBtn" type="button" aria-label="切换亮暗模式">🌙 暗色</button>
+    </header>
+
+    <section class="indices" aria-label="美股指数">
+      <article class="index-card">
+        <span class="index-name">纳斯达克</span>
+        <strong class="index-value" id="nasdaqPct">--</strong>
+        <span class="subtle" id="nasdaqMeta">Yahoo Finance</span>
+      </article>
+      <article class="index-card">
+        <span class="index-name">标普500</span>
+        <strong class="index-value" id="sp500Pct">--</strong>
+        <span class="subtle" id="sp500Meta">Yahoo Finance</span>
+      </article>
+      <article class="index-card">
+        <span class="index-name">道琼斯</span>
+        <strong class="index-value" id="dowPct">--</strong>
+        <span class="subtle" id="dowMeta">Yahoo Finance</span>
+      </article>
+      <article class="index-card">
+        <span class="index-name">恐慌指数 VIX</span>
+        <strong class="index-value" id="vixPct">--</strong>
+        <span class="subtle" id="vixMeta">Yahoo Finance</span>
+      </article>
+    </section>
+
+    <section class="dashboard" aria-label="收益汇总">
+      <div class="dash-item">
+        <span class="dash-label">总持仓金额</span>
+        <strong class="dash-value" id="totalMarket">¥0.00</strong>
+      </div>
+      <div class="dash-item">
+        <span class="dash-label">今日总盈亏</span>
+        <strong class="dash-value" id="todayProfit">¥0.00</strong>
+      </div>
+      <div class="dash-item">
+        <span class="dash-label">持有收益</span>
+        <strong class="dash-value" id="holdingProfit">¥0.00</strong>
+      </div>
+      <div class="dash-item">
+        <span class="dash-label">累计收益</span>
+        <strong class="dash-value" id="totalHistoryProfit">¥0.00</strong>
+      </div>
+      <div class="dash-item">
+        <span class="dash-label">昨日收益</span>
+        <strong class="dash-value" id="yesterdayProfit">¥0.00</strong>
+      </div>
+      <div class="dash-item">
+        <span class="dash-label">整体涨跌幅</span>
+        <strong class="dash-value" id="overallRate">0.00%</strong>
+      </div>
+    </section>
+
+    <section class="date-tools" aria-label="日期和操作">
+      <div class="date-tools-left">
+        <label class="subtle" for="activeDate">数据日期</label>
+        <input class="date-input" id="activeDate" type="date">
+        <span class="subtle" id="saveStatus">自动保存</span>
+      </div>
+      <div class="date-tools-right">
+        <button class="clear-btn" id="bulkSortBtn" type="button">↕ 批量排序</button>
+        <button class="clear-btn" id="chooseSaveBtn" type="button">📂 选择保存位置</button>
+        <button class="clear-btn" id="exportBtn" type="button">导出备份</button>
+        <button class="clear-btn" id="copyBackupBtn" type="button">复制备份</button>
+        <button class="clear-btn" id="importBtn" type="button">导入备份</button>
+        <button class="clear-btn" id="clearRatesBtn" type="button">🗑 一键清空今日涨跌幅</button>
+        <input id="importFile" type="file" accept="application/json" hidden>
+      </div>
+    </section>
+
+    <section class="fund-list" id="fundList" aria-label="基金列表"></section>
+
+    <div class="fund-actions">
+      <button class="add-btn" id="addFundBtn" type="button">+ 添加基金</button>
+    </div>
+  </main>
+
+  <div class="modal-backdrop" id="sortModal" role="dialog" aria-modal="true" aria-labelledby="sortModalTitle">
+    <div class="modal">
+      <div class="modal-head">
+        <h2 class="modal-title" id="sortModalTitle">批量排序基金</h2>
+        <button class="sort-btn" id="closeSortBtn" type="button" title="关闭">×</button>
+      </div>
+      <p class="subtle">按住每行左侧手柄拖动整行，调整完成后保存。</p>
+      <div class="sort-list" id="sortList" aria-label="基金排序列表"></div>
+      <div class="modal-actions">
+        <button class="clear-btn" id="cancelSortBtn" type="button">取消</button>
+        <button class="add-btn" id="saveSortBtn" type="button">保存排序</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const BASE_KEY = "fund-base-v2";
+    const THEME_KEY = "fund-theme-v2";
+    const DATE_KEY_PREFIX = "fund-data-";
+    const DEFAULT_CODES = [
+      "539002", "012920", "014002", "002891", "022184", "021662",
+      "008254", "024239", "016665", "021842", "017730", "018036"
+    ];
+    const INDEXES = [
+      { key: "nasdaq", symbol: "^IXIC", pct: "nasdaqPct", meta: "nasdaqMeta" },
+      { key: "sp500", symbol: "^GSPC", pct: "sp500Pct", meta: "sp500Meta" },
+      { key: "dow", symbol: "^DJI", pct: "dowPct", meta: "dowMeta" },
+      { key: "vix", symbol: "^VIX", pct: "vixPct", meta: "vixMeta", showPrice: true }
+    ];
+
+    const state = {
+      funds: [],
+      day: { date: "", funds: {} },
+      theme: "light",
+      indexTimer: null,
+      isFetchingIndex: false
+    };
+
+    const $ = (id) => document.getElementById(id);
+    const els = {
+      todayText: $("todayText"),
+      activeDate: $("activeDate"),
+      fundList: $("fundList"),
+      saveStatus: $("saveStatus"),
+      themeBtn: $("themeBtn"),
+      bulkSortBtn: $("bulkSortBtn"),
+      chooseSaveBtn: $("chooseSaveBtn"),
+      exportBtn: $("exportBtn"),
+      copyBackupBtn: $("copyBackupBtn"),
+      importBtn: $("importBtn"),
+      importFile: $("importFile"),
+      clearRatesBtn: $("clearRatesBtn"),
+      addFundBtn: $("addFundBtn"),
+      sortModal: $("sortModal"),
+      sortList: $("sortList"),
+      closeSortBtn: $("closeSortBtn"),
+      cancelSortBtn: $("cancelSortBtn"),
+      saveSortBtn: $("saveSortBtn"),
+      totalMarket: $("totalMarket"),
+      todayProfit: $("todayProfit"),
+      holdingProfit: $("holdingProfit"),
+      totalHistoryProfit: $("totalHistoryProfit"),
+      yesterdayProfit: $("yesterdayProfit"),
+      overallRate: $("overallRate")
+    };
+
+    function todayKey() {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, "0");
+      const d = String(now.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+
+    function formatDateText(date = new Date()) {
+      return new Intl.DateTimeFormat("zh-CN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        weekday: "short"
+      }).format(date);
+    }
+
+    function defaultFund(code) {
+      return {
+        id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+        code,
+        name: `基金 ${code}`,
+        note: "",
+        prevNav: "",
+        principal: "",
+        currentAmount: ""
+      };
+    }
+
+    function getDayKey(date) {
+      return `${DATE_KEY_PREFIX}${date}`;
+    }
+
+    function readJson(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      } catch {
+        return fallback;
+      }
+    }
+
+    function saveBase() {
+      localStorage.setItem(BASE_KEY, JSON.stringify(state.funds));
+      markSaved();
+      autoSaveToFile();
+    }
+
+    function saveDay() {
+      localStorage.setItem(getDayKey(state.day.date), JSON.stringify(state.day));
+      markSaved();
+      autoSaveToFile();
+    }
+
+    // ===== 自动保存到 iCloud Drive =====
+    let dirHandle = null;
+    const DB_NAME = "fund-tracker-fs";
+    const DB_STORE = "handles";
+
+    function openFSDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => { req.result.createObjectStore(DB_STORE); };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function saveDirHandle(handle) {
+      const db = await openFSDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(DB_STORE, "readwrite");
+        tx.objectStore(DB_STORE).put(handle, "dirHandle");
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    async function loadDirHandle() {
+      try {
+        const db = await openFSDB();
+        return new Promise((resolve) => {
+          const tx = db.transaction(DB_STORE, "readonly");
+          const req = tx.objectStore(DB_STORE).get("dirHandle");
+          req.onsuccess = () => resolve(req.result || null);
+          req.onerror = () => resolve(null);
+        });
+      } catch { return null; }
+    }
+
+    async function chooseSaveFolder() {
+      try {
+        dirHandle = await window.showDirectoryPicker({ mode: "readwrite" });
+        await saveDirHandle(dirHandle);
+        els.saveStatus.textContent = "保存位置已设置，数据将自动同步到 iCloud Drive";
+        await autoSaveToFile();
+      } catch (e) {
+        if (e.name !== "AbortError") {
+          els.saveStatus.textContent = "设置保存位置失败，请重试";
+        }
+      }
+    }
+
+    async function autoSaveToFile() {
+      if (!dirHandle) return;
+      try {
+        const backup = collectBackup();
+        const json = JSON.stringify(backup, null, 2);
+        const fileHandle = await dirHandle.getFileHandle("fund-data.json", { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(json);
+        await writable.close();
+      } catch (e) {
+        // 静默失败，不影响 localStorage 保存
+      }
+    }
+
+    async function loadFromFile() {
+      if (!dirHandle) return false;
+      try {
+        const fileHandle = await dirHandle.getFileHandle("fund-data.json");
+        const file = await fileHandle.getFile();
+        const text = await file.text();
+        const backup = JSON.parse(text);
+        if (!Array.isArray(backup.base) || !backup.days) return false;
+
+        localStorage.setItem(BASE_KEY, JSON.stringify(backup.base));
+        if (backup.theme === "dark" || backup.theme === "light") {
+          localStorage.setItem(THEME_KEY, backup.theme);
+        }
+        Object.entries(backup.days).forEach(([key, value]) => {
+          if (key.startsWith(DATE_KEY_PREFIX)) {
+            localStorage.setItem(key, JSON.stringify(value));
+          }
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    async function initFileSystem() {
+      dirHandle = await loadDirHandle();
+      if (dirHandle) {
+        const loaded = await loadFromFile();
+        if (loaded) {
+          els.saveStatus.textContent = "已从 iCloud Drive 加载数据";
+        }
+      }
+    }
+
+    function markSaved() {
+      els.saveStatus.textContent = `已保存 ${new Date().toLocaleTimeString("zh-CN")}`;
+    }
+
+    function loadBase() {
+      const saved = readJson(BASE_KEY, null);
+      if (Array.isArray(saved) && saved.length) {
+        state.funds = saved.map((fund) => {
+          const normalized = { ...defaultFund(fund.code || ""), ...fund };
+          if (!normalized.id) normalized.id = defaultFund("").id;
+          return normalized;
+        });
+      } else {
+        state.funds = DEFAULT_CODES.map(defaultFund);
+      }
+    }
+
+    function loadDay(date) {
+      const saved = readJson(getDayKey(date), null);
+      state.day = saved && saved.date === date ? saved : { date, funds: {} };
+      state.funds.forEach((fund) => {
+        if (!state.day.funds[fund.id]) {
+          state.day.funds[fund.id] = { rate: "", yesterdayProfit: 0, todayProfit: 0 };
+        }
+        syncDayProfit(fund);
+      });
+      saveDay();
+    }
+
+    function num(value) {
+      const n = Number(String(value ?? "").replace(/,/g, ""));
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    function money(value) {
+      return new Intl.NumberFormat("zh-CN", {
+        style: "currency",
+        currency: "CNY",
+        minimumFractionDigits: 2
+      }).format(value);
+    }
+
+    function pct(value) {
+      const sign = value > 0 ? "+" : "";
+      return `${sign}${value.toFixed(2)}%`;
+    }
+
+    function tone(value) {
+      if (value > 0) return "up-text";
+      if (value < 0) return "down-text";
+      return "neutral-text";
+    }
+
+    function todayFundData(fundId) {
+      if (!state.day.funds[fundId]) {
+        state.day.funds[fundId] = { rate: "", yesterdayProfit: 0, todayProfit: 0 };
+      }
+      return state.day.funds[fundId];
+    }
+
+    function syncDayProfit(fund) {
+      const data = todayFundData(fund.id);
+      data.todayProfit = num(fund.currentAmount) * num(data.rate) / 100;
+    }
+
+    function calcFund(fund) {
+      const dayData = todayFundData(fund.id);
+      const current = num(fund.currentAmount);
+      const principal = num(fund.principal);
+      const rate = num(dayData.rate);
+      return {
+        rate,
+        todayProfit: current * rate / 100,
+        holdingProfit: current - principal
+      };
+    }
+
+    function allDateKeys() {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i += 1) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(DATE_KEY_PREFIX)) keys.push(key);
+      }
+      return keys;
+    }
+
+    function historyTotal() {
+      return allDateKeys().reduce((sum, key) => {
+        const day = readJson(key, null);
+        if (!day || !day.funds) return sum;
+        return sum + state.funds.reduce((fundSum, fund) => {
+          return fundSum + num(day.funds[fund.id]?.todayProfit);
+        }, 0);
+      }, 0);
+    }
+
+    function escapeAttr(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    function renderSummary() {
+      const totals = state.funds.reduce((acc, fund) => {
+        const calc = calcFund(fund);
+        acc.market += num(fund.currentAmount);
+        acc.principal += num(fund.principal);
+        acc.today += calc.todayProfit;
+        acc.holding += calc.holdingProfit;
+        acc.yesterday += num(todayFundData(fund.id).yesterdayProfit);
+        return acc;
+      }, { market: 0, principal: 0, today: 0, holding: 0, yesterday: 0 });
+
+      const overall = totals.market ? totals.today / totals.market * 100 : 0;
+      const history = historyTotal();
+      els.totalMarket.textContent = money(totals.market);
+      setTone(els.todayProfit, money(totals.today), totals.today);
+      setTone(els.holdingProfit, money(totals.holding), totals.holding);
+      setTone(els.totalHistoryProfit, money(history), history);
+      setTone(els.yesterdayProfit, money(totals.yesterday), totals.yesterday);
+      setTone(els.overallRate, pct(overall), overall);
+    }
+
+    function setTone(el, text, value) {
+      el.textContent = text;
+      el.className = `dash-value ${tone(value)}`;
+    }
+
+    function renderFunds() {
+      els.fundList.innerHTML = state.funds.map((fund, index) => {
+        const data = todayFundData(fund.id);
+        const calc = calcFund(fund);
+        const trend = calc.rate > 0 ? "up" : calc.rate < 0 ? "down" : "";
+        const progressWidth = Math.min(Math.abs(calc.rate), 8) / 8 * 100;
+        const fillColor = calc.rate > 0 ? "var(--red)" : calc.rate < 0 ? "var(--green)" : "var(--muted)";
+
+        return `
+          <article class="fund-card ${trend}" data-id="${fund.id}">
+            <div class="sort-controls" aria-label="基金排序">
+              <button class="sort-btn" type="button" data-action="move-up" title="上移" ${index === 0 ? "disabled" : ""}>↑</button>
+              <button class="sort-btn" type="button" data-action="move-down" title="下移" ${index === state.funds.length - 1 ? "disabled" : ""}>↓</button>
+              <button class="delete-btn" type="button" data-action="delete-fund" title="删除">×</button>
+            </div>
+            <div class="field identity">
+              <label class="field">
+                <span class="field-label">基金代码</span>
+                <input data-scope="base" data-field="code" value="${escapeAttr(fund.code)}">
+              </label>
+              <label class="field">
+                <span class="field-label">基金名称</span>
+                <input data-scope="base" data-field="name" value="${escapeAttr(fund.name)}">
+              </label>
+              <label class="field remarks">
+                <span class="field-label">备注</span>
+                <input data-scope="base" data-field="note" value="${escapeAttr(fund.note)}" placeholder="定投中 / 已清仓">
+              </label>
+            </div>
+            <label class="field">
+              <span class="field-label">前一日净值</span>
+              <input data-scope="base" data-field="prevNav" inputmode="decimal" value="${escapeAttr(fund.prevNav)}" placeholder="0.0000">
+            </label>
+            <label class="field">
+              <span class="field-label">投入本金</span>
+              <input data-scope="base" data-field="principal" inputmode="decimal" value="${escapeAttr(fund.principal)}" placeholder="0.00">
+            </label>
+            <label class="field">
+              <span class="field-label">当前持仓金额</span>
+              <input data-scope="base" data-field="currentAmount" inputmode="decimal" value="${escapeAttr(fund.currentAmount)}" placeholder="0.00">
+            </label>
+            <label class="field">
+              <span class="field-label">今日估算涨跌幅%</span>
+              <input data-scope="day" data-field="rate" inputmode="decimal" value="${escapeAttr(data.rate)}" placeholder="0.00">
+            </label>
+            <div class="calc-box">
+              <span class="field-label">估算盈亏 / 持有收益</span>
+              <span class="calc-value ${tone(calc.todayProfit)}" data-role="today-profit">${money(calc.todayProfit)}</span>
+              <span class="subtle ${tone(calc.holdingProfit)}" data-role="holding-profit">持有收益 ${money(calc.holdingProfit)}</span>
+              <div class="progress-track" aria-label="涨跌幅进度条">
+                <div class="progress-fill" style="width:${progressWidth}%;background:${fillColor}"></div>
+              </div>
+            </div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function render() {
+      els.todayText.textContent = formatDateText();
+      els.activeDate.value = state.day.date;
+      document.body.classList.toggle("dark", state.theme === "dark");
+      els.themeBtn.textContent = state.theme === "dark" ? "☀️ 亮色" : "🌙 暗色";
+      renderSummary();
+      renderFunds();
+    }
+
+    function updateField(card, target) {
+      const fund = state.funds.find((item) => item.id === card.dataset.id);
+      if (!fund) return;
+
+      if (target.dataset.scope === "base") {
+        fund[target.dataset.field] = target.value;
+        syncDayProfit(fund);
+        saveBase();
+        saveDay();
+      } else {
+        const data = todayFundData(fund.id);
+        data.yesterdayProfit = num(data.todayProfit);
+        data[target.dataset.field] = target.value;
+        syncDayProfit(fund);
+        saveDay();
+      }
+
+      renderCardComputed(card, fund);
+      renderSummary();
+    }
+
+    function renderCardComputed(card, fund) {
+      const calc = calcFund(fund);
+      const trend = calc.rate > 0 ? "up" : calc.rate < 0 ? "down" : "";
+      const profitEl = card.querySelector("[data-role='today-profit']");
+      const holdingEl = card.querySelector("[data-role='holding-profit']");
+      const fillEl = card.querySelector(".progress-fill");
+      const width = Math.min(Math.abs(calc.rate), 8) / 8 * 100;
+
+      card.classList.toggle("up", trend === "up");
+      card.classList.toggle("down", trend === "down");
+      profitEl.textContent = money(calc.todayProfit);
+      profitEl.className = `calc-value ${tone(calc.todayProfit)}`;
+      holdingEl.textContent = `持有收益 ${money(calc.holdingProfit)}`;
+      holdingEl.className = `subtle ${tone(calc.holdingProfit)}`;
+      fillEl.style.width = `${width}%`;
+      fillEl.style.background =
+        calc.rate > 0 ? "var(--red)" : calc.rate < 0 ? "var(--green)" : "var(--muted)";
+    }
+
+    function addFund() {
+      state.funds.push(defaultFund(""));
+      saveBase();
+      loadDay(state.day.date);
+      render();
+    }
+
+    function clearRates() {
+      state.funds.forEach((fund) => {
+        const data = todayFundData(fund.id);
+        data.yesterdayProfit = num(fund.currentAmount) * num(data.rate) / 100;
+        data.rate = "";
+      });
+      saveDay();
+      render();
+    }
+
+    function moveFund(fundId, direction) {
+      const index = state.funds.findIndex((fund) => fund.id === fundId);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= state.funds.length) return;
+
+      const [fund] = state.funds.splice(index, 1);
+      state.funds.splice(nextIndex, 0, fund);
+      saveBase();
+      render();
+    }
+
+    function deleteFund(fundId) {
+      const fund = state.funds.find((item) => item.id === fundId);
+      if (!fund) return;
+      const name = fund.name || fund.code || "这只基金";
+      if (!confirm(`确定删除「${name}」吗？本机保存的这只基金数据也会移除。`)) return;
+
+      state.funds = state.funds.filter((item) => item.id !== fundId);
+      delete state.day.funds[fundId];
+      saveBase();
+      saveDay();
+      render();
+    }
+
+    function openSortModal() {
+      renderSortList();
+      els.sortModal.classList.add("show");
+    }
+
+    function closeSortModal() {
+      els.sortModal.classList.remove("show");
+    }
+
+    function renderSortList() {
+      els.sortList.innerHTML = state.funds.map((fund) => `
+        <div class="sort-row" draggable="true" data-id="${fund.id}">
+          <button class="drag-handle" type="button" title="拖动排序">☰</button>
+          <span class="sort-code">${escapeAttr(fund.code || "(未填)")}</span>
+          <span class="sort-name">${escapeAttr(fund.name || "")}</span>
+        </div>
+      `).join("");
+    }
+
+    function placeSortRow(row, target, clientY) {
+      if (!row || !target || row === target) return;
+      const rect = target.getBoundingClientRect();
+      const beforeTarget = clientY < rect.top + rect.height / 2;
+      els.sortList.insertBefore(row, beforeTarget ? target : target.nextSibling);
+    }
+
+    function saveBulkSort() {
+      const ids = Array.from(els.sortList.querySelectorAll(".sort-row"))
+        .map((row) => row.dataset.id);
+      const byId = new Map(state.funds.map((fund) => [fund.id, fund]));
+      const sorted = [];
+      ids.forEach((id) => {
+        if (byId.has(id) && !sorted.includes(byId.get(id))) {
+          sorted.push(byId.get(id));
+        }
+      });
+      state.funds.forEach((fund) => {
+        if (!sorted.includes(fund)) sorted.push(fund);
+      });
+      state.funds = sorted;
+      saveBase();
+      closeSortModal();
+      render();
+    }
+
+    function collectBackup() {
+      const days = {};
+      allDateKeys().forEach((key) => {
+        days[key] = readJson(key, null);
+      });
+      return {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        base: state.funds,
+        theme: state.theme,
+        days
+      };
+    }
+
+    function exportBackup() {
+      const json = JSON.stringify(collectBackup(), null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `美股基金备份-${todayKey()}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      els.saveStatus.textContent = "备份已下载";
+    }
+
+    function copyBackup() {
+      const json = JSON.stringify(collectBackup(), null, 2);
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(json).then(() => {
+          els.saveStatus.textContent = "备份已复制到剪贴板";
+        }).catch(() => {
+          showBackupText(json);
+        });
+      } else {
+        showBackupText(json);
+      }
+    }
+
+    function showBackupText(json) {
+      const existing = document.getElementById("backupTextArea");
+      if (existing) { existing.value = json; existing.style.display = "block"; return; }
+      const ta = document.createElement("textarea");
+      ta.id = "backupTextArea";
+      ta.value = json;
+      ta.readOnly = true;
+      ta.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:90%;max-width:500px;height:300px;z-index:30;border-radius:10px;border:2px solid var(--blue);padding:12px;font-size:12px;font-family:monospace;background:var(--panel);color:var(--text);display:block;";
+      const close = document.createElement("button");
+      close.textContent = "关闭";
+      close.style.cssText = "position:fixed;top:calc(50% + 170px);left:50%;transform:translateX(-50%);z-index:31;padding:8px 24px;border-radius:8px;background:var(--blue);color:#fff;border:none;cursor:pointer;";
+      close.onclick = () => { ta.remove(); close.remove(); };
+      document.body.appendChild(ta);
+      document.body.appendChild(close);
+      ta.select();
+      els.saveStatus.textContent = "请手动复制文本框中的备份数据";
+    }
+
+    function importBackupFile(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const backup = JSON.parse(reader.result);
+          if (!Array.isArray(backup.base) || !backup.days) {
+            throw new Error("invalid backup");
+          }
+
+          localStorage.setItem(BASE_KEY, JSON.stringify(backup.base));
+          if (backup.theme === "dark" || backup.theme === "light") {
+            localStorage.setItem(THEME_KEY, backup.theme);
+          }
+          Object.entries(backup.days).forEach(([key, value]) => {
+            if (key.startsWith(DATE_KEY_PREFIX)) {
+              localStorage.setItem(key, JSON.stringify(value));
+            }
+          });
+
+          state.theme = localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
+          loadBase();
+          loadDay(els.activeDate.value || todayKey());
+          render();
+          alert("备份已导入。");
+        } catch {
+          alert("导入失败，请确认选择的是本页面导出的备份 JSON。");
+        } finally {
+          els.importFile.value = "";
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    async function fetchWithTimeout(url, timeout = 8000) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeout);
+      try {
+        return await fetch(url, { cache: "no-store", signal: controller.signal });
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    async function fetchIndex(symbol) {
+      const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=1d&interval=1m`;
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(chartUrl)}`;
+      let response;
+      try {
+        response = await fetchWithTimeout(chartUrl);
+      } catch {
+        response = await fetchWithTimeout(proxyUrl);
+      }
+      if (!response.ok) throw new Error("index fetch failed");
+
+      const data = await response.json();
+      const meta = data?.chart?.result?.[0]?.meta || {};
+      const price = num(meta.regularMarketPrice);
+      const prev = num(meta.chartPreviousClose || meta.previousClose);
+      if (!price || !prev) throw new Error("index data missing");
+      return {
+        price,
+        changePercent: (price - prev) / prev * 100
+      };
+    }
+
+    async function refreshIndexes() {
+      if (state.isFetchingIndex) return;
+      state.isFetchingIndex = true;
+      await Promise.all(INDEXES.map(async (item) => {
+        const pctEl = $(item.pct);
+        const metaEl = $(item.meta);
+        try {
+          const quote = await fetchIndex(item.symbol);
+          pctEl.textContent = item.showPrice ? quote.price.toFixed(2) : pct(quote.changePercent);
+          pctEl.className = `index-value ${tone(quote.changePercent)}`;
+          metaEl.textContent = item.showPrice
+            ? `${pct(quote.changePercent)} · ${new Date().toLocaleTimeString("zh-CN")}`
+            : `更新于 ${new Date().toLocaleTimeString("zh-CN")}`;
+        } catch {
+          pctEl.textContent = "--";
+          pctEl.className = "index-value neutral-text";
+          metaEl.textContent = "获取失败";
+        }
+      }));
+      state.isFetchingIndex = false;
+    }
+
+    function bindEvents() {
+      els.fundList.addEventListener("input", (event) => {
+        const target = event.target;
+        const card = target.closest(".fund-card");
+        if (!card || !target.dataset.field) return;
+        updateField(card, target);
+      });
+
+      els.fundList.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-action]");
+        const card = event.target.closest(".fund-card");
+        if (!button || !card) return;
+
+        if (button.dataset.action === "move-up") moveFund(card.dataset.id, -1);
+        if (button.dataset.action === "move-down") moveFund(card.dataset.id, 1);
+        if (button.dataset.action === "delete-fund") deleteFund(card.dataset.id);
+      });
+
+      els.activeDate.addEventListener("change", () => {
+        loadDay(els.activeDate.value || todayKey());
+        render();
+      });
+
+      els.themeBtn.addEventListener("click", () => {
+        state.theme = state.theme === "dark" ? "light" : "dark";
+        localStorage.setItem(THEME_KEY, state.theme);
+        render();
+      });
+
+      els.clearRatesBtn.addEventListener("click", clearRates);
+      els.addFundBtn.addEventListener("click", addFund);
+      els.bulkSortBtn.addEventListener("click", openSortModal);
+      els.exportBtn.addEventListener("click", exportBackup);
+      els.copyBackupBtn.addEventListener("click", copyBackup);
+      els.chooseSaveBtn.addEventListener("click", chooseSaveFolder);
+      els.importBtn.addEventListener("click", () => els.importFile.click());
+      els.importFile.addEventListener("change", () => {
+        importBackupFile(els.importFile.files[0]);
+      });
+      let activeSortRow = null;
+      els.sortList.addEventListener("dragstart", (event) => {
+        activeSortRow = event.target.closest(".sort-row");
+        if (!activeSortRow) return;
+        activeSortRow.classList.add("dragging");
+        event.dataTransfer.effectAllowed = "move";
+      });
+      els.sortList.addEventListener("dragover", (event) => {
+        if (!activeSortRow) return;
+        event.preventDefault();
+        placeSortRow(activeSortRow, event.target.closest(".sort-row"), event.clientY);
+      });
+      els.sortList.addEventListener("dragend", () => {
+        activeSortRow?.classList.remove("dragging");
+        activeSortRow = null;
+      });
+      els.sortList.addEventListener("pointerdown", (event) => {
+        const handle = event.target.closest(".drag-handle");
+        if (!handle) return;
+        activeSortRow = handle.closest(".sort-row");
+        activeSortRow.classList.add("dragging");
+        handle.setPointerCapture?.(event.pointerId);
+      });
+      els.sortList.addEventListener("pointermove", (event) => {
+        if (!activeSortRow) return;
+        const target = document.elementFromPoint(event.clientX, event.clientY)?.closest(".sort-row");
+        placeSortRow(activeSortRow, target, event.clientY);
+      });
+      ["pointerup", "pointercancel"].forEach((type) => {
+        els.sortList.addEventListener(type, () => {
+          activeSortRow?.classList.remove("dragging");
+          activeSortRow = null;
+        });
+      });
+      els.closeSortBtn.addEventListener("click", closeSortModal);
+      els.cancelSortBtn.addEventListener("click", closeSortModal);
+      els.saveSortBtn.addEventListener("click", saveBulkSort);
+      els.sortModal.addEventListener("click", (event) => {
+        if (event.target === els.sortModal) closeSortModal();
+      });
+    }
+
+    async function init() {
+      state.theme = localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
+      loadBase();
+      loadDay(todayKey());
+      bindEvents();
+      render();
+      refreshIndexes();
+      state.indexTimer = setInterval(refreshIndexes, 30000);
+      setInterval(() => {
+        els.todayText.textContent = formatDateText();
+      }, 60000);
+      // 初始化文件系统
+      await initFileSystem();
+    }
+
+    init();
+  </script>
+</body>
+</html>
