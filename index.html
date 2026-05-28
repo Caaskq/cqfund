@@ -896,30 +896,35 @@
     }
 
     async function readJson(key, fallback) {
+      // 优先 localStorage（最可靠，同步）
+      try {
+        const raw = localStorage.getItem(key);
+        if (raw) return JSON.parse(raw);
+      } catch {}
+      // 其次 IndexedDB
       try {
         const raw = await idb.getItem(key);
         if (raw) return JSON.parse(raw);
       } catch {}
-      try {
-        const raw = localStorage.getItem(key);
-        return raw ? JSON.parse(raw) : fallback;
-      } catch {
-        return fallback;
-      }
+      return fallback;
     }
 
     async function saveBase() {
       const json = JSON.stringify(state.funds);
-      await idb.setItem(BASE_KEY, json);
+      // 先写 localStorage（最可靠）
       try { localStorage.setItem(BASE_KEY, json); } catch {}
+      // 再写 IndexedDB
+      try { await idb.setItem(BASE_KEY, json); } catch {}
       markSaved();
     }
 
     async function saveDay() {
       const json = JSON.stringify(state.day);
       const key = getDayKey(state.day.date);
-      await idb.setItem(key, json);
+      // 先写 localStorage（最可靠）
       try { localStorage.setItem(key, json); } catch {}
+      // 再写 IndexedDB
+      try { await idb.setItem(key, json); } catch {}
       markSaved();
     }
 
@@ -1275,11 +1280,43 @@
       const json = JSON.stringify(backup, null, 2);
       const now = new Date();
       const ts = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}${String(now.getSeconds()).padStart(2,'0')}`;
+      const filename = `fund-backup-${ts}.json`;
       const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);
+
+      // 方法1：window.open（iOS Safari 兼容）
+      const w = window.open(url, "_blank");
+      if (w) {
+        setTimeout(() => { w.close(); URL.revokeObjectURL(url); }, 500);
+        els.saveStatus.textContent = "备份已下载（如未弹出，请点下方链接）";
+        // 兜底：显示一个可见链接
+        const oldLink = document.getElementById("fallbackLink");
+        if (oldLink) oldLink.remove();
+        const linkEl = document.createElement("div");
+        linkEl.id = "fallbackLink";
+        linkEl.style.cssText = "margin-top:8px;padding:8px;background:var(--field);border-radius:6px;word-break:break-all;font-size:12px;";
+        linkEl.innerHTML = `如未下载，<a href="${url}" download="${filename}" style="color:var(--blue)">点此保存</a>（长按链接→下载链接文件）`;
+        els.saveStatus.parentNode.insertBefore(linkEl, els.saveStatus.nextSibling);
+        return;
+      }
+
+      // 方法2：navigator.share（iOS 14+）
+      try {
+        const file = new File([blob], filename, { type: "application/json" });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: "基金数据备份" });
+          els.saveStatus.textContent = "备份已保存";
+          URL.revokeObjectURL(url);
+          return;
+        }
+      } catch (e) {
+        if (e.name !== "AbortError") console.error(e);
+      }
+
+      // 方法3：a.click兜底
       const a = document.createElement("a");
       a.href = url;
-      a.download = `fund-backup-${ts}.json`;
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
