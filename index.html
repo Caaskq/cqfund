@@ -744,6 +744,71 @@
     const BASE_KEY = "fund-base-v2";
     const THEME_KEY = "fund-theme-v2";
     const DATE_KEY_PREFIX = "fund-data-";
+
+    // ===== IndexedDB 存储封装 =====
+    const idb = (() => {
+      const DB_NAME = "fundTracker";
+      const STORE_NAME = "fundData";
+      let dbPromise = null;
+
+      function open() {
+        if (!dbPromise) {
+          dbPromise = new Promise((resolve, reject) => {
+            const req = indexedDB.open(DB_NAME, 1);
+            req.onupgradeneeded = () => {
+              if (!req.result.objectStoreNames.contains(STORE_NAME)) {
+                req.result.createObjectStore(STORE_NAME);
+              }
+            };
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = () => reject(req.error);
+          });
+        }
+        return dbPromise;
+      }
+
+      async function getItem(key) {
+        const db = await open();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_NAME, "readonly");
+          const req = tx.objectStore(STORE_NAME).get(key);
+          req.onsuccess = () => resolve(req.result !== undefined ? req.result : null);
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      async function setItem(key, value) {
+        const db = await open();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_NAME, "readwrite");
+          tx.objectStore(STORE_NAME).put(value, key);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+      }
+
+      async function removeItem(key) {
+        const db = await open();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_NAME, "readwrite");
+          tx.objectStore(STORE_NAME).delete(key);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        });
+      }
+
+      async function getAllKeys() {
+        const db = await open();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(STORE_NAME, "readonly");
+          const req = tx.objectStore(STORE_NAME).getAllKeys();
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => reject(req.error);
+        });
+      }
+
+      return { getItem, setItem, removeItem, getAllKeys };
+    })();
     const DEFAULT_CODES = [
       "539002", "012920", "014002", "002891", "022184", "021662",
       "008254", "024239", "016665", "021842", "017730", "018036"
@@ -824,23 +889,23 @@
       return `${DATE_KEY_PREFIX}${date}`;
     }
 
-    function readJson(key, fallback) {
+    async function readJson(key, fallback) {
       try {
-        const raw = localStorage.getItem(key);
+        const raw = await idb.getItem(key);
         return raw ? JSON.parse(raw) : fallback;
       } catch {
         return fallback;
       }
     }
 
-    function saveBase() {
-      localStorage.setItem(BASE_KEY, JSON.stringify(state.funds));
+    async function saveBase() {
+      await idb.setItem(BASE_KEY, JSON.stringify(state.funds));
       markSaved();
       autoSaveToFile();
     }
 
-    function saveDay() {
-      localStorage.setItem(getDayKey(state.day.date), JSON.stringify(state.day));
+    async function saveDay() {
+      await idb.setItem(getDayKey(state.day.date), JSON.stringify(state.day));
       markSaved();
       autoSaveToFile();
     }
@@ -917,15 +982,15 @@
         const backup = JSON.parse(text);
         if (!Array.isArray(backup.base) || !backup.days) return false;
 
-        localStorage.setItem(BASE_KEY, JSON.stringify(backup.base));
+        await idb.setItem(BASE_KEY, JSON.stringify(backup.base));
         if (backup.theme === "dark" || backup.theme === "light") {
-          localStorage.setItem(THEME_KEY, backup.theme);
+          await idb.setItem(THEME_KEY, backup.theme);
         }
-        Object.entries(backup.days).forEach(([key, value]) => {
+        for (const [key, value] of Object.entries(backup.days)) {
           if (key.startsWith(DATE_KEY_PREFIX)) {
-            localStorage.setItem(key, JSON.stringify(value));
+            await idb.setItem(key, JSON.stringify(value));
           }
-        });
+        }
         return true;
       } catch {
         return false;
@@ -946,8 +1011,8 @@
       els.saveStatus.textContent = `已保存 ${new Date().toLocaleTimeString("zh-CN")}`;
     }
 
-    function loadBase() {
-      const saved = readJson(BASE_KEY, null);
+    async function loadBase() {
+      const saved = await readJson(BASE_KEY, null);
       if (Array.isArray(saved) && saved.length) {
         state.funds = saved.map((fund) => {
           const normalized = { ...defaultFund(fund.code || ""), ...fund };
@@ -959,8 +1024,8 @@
       }
     }
 
-    function loadDay(date) {
-      const saved = readJson(getDayKey(date), null);
+    async function loadDay(date) {
+      const saved = await readJson(getDayKey(date), null);
       state.day = saved && saved.date === date ? saved : { date, funds: {} };
       state.funds.forEach((fund) => {
         if (!state.day.funds[fund.id]) {
@@ -968,7 +1033,7 @@
         }
         syncDayProfit(fund);
       });
-      saveDay();
+      await saveDay();
     }
 
     function num(value) {
@@ -1019,23 +1084,22 @@
       };
     }
 
-    function allDateKeys() {
-      const keys = [];
-      for (let i = 0; i < localStorage.length; i += 1) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith(DATE_KEY_PREFIX)) keys.push(key);
-      }
-      return keys;
+    async function allDateKeys() {
+      const keys = await idb.getAllKeys();
+      return keys.filter(key => key.startsWith(DATE_KEY_PREFIX));
     }
 
-    function historyTotal() {
-      return allDateKeys().reduce((sum, key) => {
-        const day = readJson(key, null);
-        if (!day || !day.funds) return sum;
-        return sum + state.funds.reduce((fundSum, fund) => {
+    async function historyTotal() {
+      const keys = await allDateKeys();
+      let total = 0;
+      for (const key of keys) {
+        const day = await readJson(key, null);
+        if (!day || !day.funds) continue;
+        total += state.funds.reduce((fundSum, fund) => {
           return fundSum + num(day.funds[fund.id]?.todayProfit);
         }, 0);
-      }, 0);
+      }
+      return total;
     }
 
     function escapeAttr(value) {
@@ -1046,7 +1110,7 @@
         .replace(/>/g, "&gt;");
     }
 
-    function renderSummary() {
+    async function renderSummary() {
       const totals = state.funds.reduce((acc, fund) => {
         const calc = calcFund(fund);
         acc.market += num(fund.currentAmount);
@@ -1058,7 +1122,7 @@
       }, { market: 0, principal: 0, today: 0, holding: 0, yesterday: 0 });
 
       const overall = totals.market ? totals.today / totals.market * 100 : 0;
-      const history = historyTotal();
+      const history = await historyTotal();
       els.totalMarket.textContent = money(totals.market);
       setTone(els.todayProfit, money(totals.today), totals.today);
       setTone(els.holdingProfit, money(totals.holding), totals.holding);
@@ -1130,12 +1194,12 @@
       }).join("");
     }
 
-    function render() {
+    async function render() {
       els.todayText.textContent = formatDateText();
       els.activeDate.value = state.day.date;
       document.body.classList.toggle("dark", state.theme === "dark");
       els.themeBtn.textContent = state.theme === "dark" ? "☀️ 亮色" : "🌙 暗色";
-      renderSummary();
+      await renderSummary();
       renderFunds();
     }
 
@@ -1146,18 +1210,18 @@
       if (target.dataset.scope === "base") {
         fund[target.dataset.field] = target.value;
         syncDayProfit(fund);
-        saveBase();
-        saveDay();
+        saveBase().catch(console.error);
+        saveDay().catch(console.error);
       } else {
         const data = todayFundData(fund.id);
         data.yesterdayProfit = num(data.todayProfit);
         data[target.dataset.field] = target.value;
         syncDayProfit(fund);
-        saveDay();
+        saveDay().catch(console.error);
       }
 
       renderCardComputed(card, fund);
-      renderSummary();
+      renderSummary().catch(console.error);
     }
 
     function renderCardComputed(card, fund) {
@@ -1179,35 +1243,35 @@
         calc.rate > 0 ? "var(--red)" : calc.rate < 0 ? "var(--green)" : "var(--muted)";
     }
 
-    function addFund() {
+    async function addFund() {
       state.funds.push(defaultFund(""));
-      saveBase();
-      loadDay(state.day.date);
-      render();
+      await saveBase();
+      await loadDay(state.day.date);
+      await render();
     }
 
-    function clearRates() {
+    async function clearRates() {
       state.funds.forEach((fund) => {
         const data = todayFundData(fund.id);
         data.yesterdayProfit = num(fund.currentAmount) * num(data.rate) / 100;
         data.rate = "";
       });
-      saveDay();
-      render();
+      await saveDay();
+      await render();
     }
 
-    function moveFund(fundId, direction) {
+    async function moveFund(fundId, direction) {
       const index = state.funds.findIndex((fund) => fund.id === fundId);
       const nextIndex = index + direction;
       if (index < 0 || nextIndex < 0 || nextIndex >= state.funds.length) return;
 
       const [fund] = state.funds.splice(index, 1);
       state.funds.splice(nextIndex, 0, fund);
-      saveBase();
-      render();
+      await saveBase();
+      await render();
     }
 
-    function deleteFund(fundId) {
+    async function deleteFund(fundId) {
       const fund = state.funds.find((item) => item.id === fundId);
       if (!fund) return;
       const name = fund.name || fund.code || "这只基金";
@@ -1215,9 +1279,9 @@
 
       state.funds = state.funds.filter((item) => item.id !== fundId);
       delete state.day.funds[fundId];
-      saveBase();
-      saveDay();
-      render();
+      await saveBase();
+      await saveDay();
+      await render();
     }
 
     function openSortModal() {
@@ -1246,7 +1310,7 @@
       els.sortList.insertBefore(row, beforeTarget ? target : target.nextSibling);
     }
 
-    function saveBulkSort() {
+    async function saveBulkSort() {
       const ids = Array.from(els.sortList.querySelectorAll(".sort-row"))
         .map((row) => row.dataset.id);
       const byId = new Map(state.funds.map((fund) => [fund.id, fund]));
@@ -1260,16 +1324,17 @@
         if (!sorted.includes(fund)) sorted.push(fund);
       });
       state.funds = sorted;
-      saveBase();
+      await saveBase();
       closeSortModal();
-      render();
+      await render();
     }
 
-    function collectBackup() {
+    async function collectBackup() {
       const days = {};
-      allDateKeys().forEach((key) => {
-        days[key] = readJson(key, null);
-      });
+      const keys = await allDateKeys();
+      for (const key of keys) {
+        days[key] = await readJson(key, null);
+      }
       return {
         version: 1,
         exportedAt: new Date().toISOString(),
@@ -1279,8 +1344,9 @@
       };
     }
 
-    function exportBackup() {
-      const json = JSON.stringify(collectBackup(), null, 2);
+    async function exportBackup() {
+      const backup = await collectBackup();
+      const json = JSON.stringify(backup, null, 2);
       const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -1293,8 +1359,9 @@
       els.saveStatus.textContent = "备份已下载";
     }
 
-    function copyBackup() {
-      const json = JSON.stringify(collectBackup(), null, 2);
+    async function copyBackup() {
+      const backup = await collectBackup();
+      const json = JSON.stringify(backup, null, 2);
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(json).then(() => {
           els.saveStatus.textContent = "备份已复制到剪贴板";
@@ -1327,27 +1394,27 @@
     function importBackupFile(file) {
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         try {
           const backup = JSON.parse(reader.result);
           if (!Array.isArray(backup.base) || !backup.days) {
             throw new Error("invalid backup");
           }
 
-          localStorage.setItem(BASE_KEY, JSON.stringify(backup.base));
+          await idb.setItem(BASE_KEY, JSON.stringify(backup.base));
           if (backup.theme === "dark" || backup.theme === "light") {
-            localStorage.setItem(THEME_KEY, backup.theme);
+            await idb.setItem(THEME_KEY, backup.theme);
           }
-          Object.entries(backup.days).forEach(([key, value]) => {
+          for (const [key, value] of Object.entries(backup.days)) {
             if (key.startsWith(DATE_KEY_PREFIX)) {
-              localStorage.setItem(key, JSON.stringify(value));
+              await idb.setItem(key, JSON.stringify(value));
             }
-          });
+          }
 
-          state.theme = localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
-          loadBase();
-          loadDay(els.activeDate.value || todayKey());
-          render();
+          state.theme = (await idb.getItem(THEME_KEY)) === "dark" ? "dark" : "light";
+          await loadBase();
+          await loadDay(els.activeDate.value || todayKey());
+          await render();
           alert("备份已导入。");
         } catch {
           alert("导入失败，请确认选择的是本页面导出的备份 JSON。");
@@ -1425,27 +1492,27 @@
         const card = event.target.closest(".fund-card");
         if (!button || !card) return;
 
-        if (button.dataset.action === "move-up") moveFund(card.dataset.id, -1);
-        if (button.dataset.action === "move-down") moveFund(card.dataset.id, 1);
-        if (button.dataset.action === "delete-fund") deleteFund(card.dataset.id);
+        if (button.dataset.action === "move-up") { moveFund(card.dataset.id, -1).catch(console.error); }
+        if (button.dataset.action === "move-down") { moveFund(card.dataset.id, 1).catch(console.error); }
+        if (button.dataset.action === "delete-fund") { deleteFund(card.dataset.id).catch(console.error); }
       });
 
-      els.activeDate.addEventListener("change", () => {
-        loadDay(els.activeDate.value || todayKey());
-        render();
+      els.activeDate.addEventListener("change", async () => {
+        await loadDay(els.activeDate.value || todayKey());
+        await render();
       });
 
       els.themeBtn.addEventListener("click", () => {
         state.theme = state.theme === "dark" ? "light" : "dark";
-        localStorage.setItem(THEME_KEY, state.theme);
-        render();
+        idb.setItem(THEME_KEY, state.theme).catch(console.error);
+        render().catch(console.error);
       });
 
-      els.clearRatesBtn.addEventListener("click", clearRates);
-      els.addFundBtn.addEventListener("click", addFund);
+      els.clearRatesBtn.addEventListener("click", () => { clearRates().catch(console.error); });
+      els.addFundBtn.addEventListener("click", () => { addFund().catch(console.error); });
       els.bulkSortBtn.addEventListener("click", openSortModal);
-      els.exportBtn.addEventListener("click", exportBackup);
-      els.copyBackupBtn.addEventListener("click", copyBackup);
+      els.exportBtn.addEventListener("click", () => { exportBackup().catch(console.error); });
+      els.copyBackupBtn.addEventListener("click", () => { copyBackup().catch(console.error); });
       els.chooseSaveBtn.addEventListener("click", chooseSaveFolder);
       els.importBtn.addEventListener("click", () => els.importFile.click());
       els.importFile.addEventListener("change", () => {
@@ -1487,18 +1554,18 @@
       });
       els.closeSortBtn.addEventListener("click", closeSortModal);
       els.cancelSortBtn.addEventListener("click", closeSortModal);
-      els.saveSortBtn.addEventListener("click", saveBulkSort);
+      els.saveSortBtn.addEventListener("click", () => { saveBulkSort().catch(console.error); });
       els.sortModal.addEventListener("click", (event) => {
         if (event.target === els.sortModal) closeSortModal();
       });
     }
 
     async function init() {
-      state.theme = localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
-      loadBase();
-      loadDay(todayKey());
+      state.theme = (await idb.getItem(THEME_KEY)) === "dark" ? "dark" : "light";
+      await loadBase();
+      await loadDay(todayKey());
       bindEvents();
-      render();
+      await render();
       refreshIndexes();
       state.indexTimer = setInterval(refreshIndexes, 30000);
       setInterval(() => {
